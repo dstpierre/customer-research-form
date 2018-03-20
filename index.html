@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <title>Roadmap customer research</title>
+				<link rel="stylesheet" href="https://roadmap.space/css/bulma.css">
+
+				<style>
+					.roadmap-static img {
+						width: 40px;
+					}
+				</style>
+				
+				<script>
+					var s = document.createElement("script");
+					s.src = "./cr.js?x" + (new Date().getTime());
+					document.head.appendChild(s);
+				</script>
+    </head>
+    
+    <body>
+			<div id="app"></div>
+			<script id="roadmap-widget" src="https://drofij53yrdlb.cloudfront.net/init.js"></script>
+			<script>
+				window.intercomSettings = {
+					app_id: "tquruup0"
+				};
+			</script>
+			<script>(function () { var w = window; var ic = w.Intercom; if (typeof ic === "function") { ic('reattach_activator'); ic('update', intercomSettings); } else { var d = document; var i = function () { i.c(arguments) }; i.q = []; i.c = function (args) { i.q.push(args) }; w.Intercom = i; function l() { var s = d.createElement('script'); s.type = 'text/javascript'; s.async = true; s.src = 'https://widget.intercom.io/widget/tquruup0'; var x = d.getElementsByTagName('script')[0]; x.parentNode.insertBefore(s, x); } if (w.attachEvent) { w.attachEvent('onload', l); } else { w.addEventListener('load', l, false); } } })()</script>
+
+			<script>
+					setTimeout(function() {
+						var node = document.getElementById("app");
+						var app = Elm.Main.embed(node);
+						//var app = Elm.Main.fullscreen();
+					}, 100);
+		
+					setTimeout(function() {
+						if (RoadmapWidget) {
+							RoadmapWidget.load({id: "57b8488bc7899e5cb4337f06"});
+						}
+					}, 1000);
+				</script>
+    </body>
+</html>
