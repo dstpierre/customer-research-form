@@ -31,8 +31,38 @@
 			<script>
 					setTimeout(function() {
 						var node = document.getElementById("app");
-						var app = Elm.Main.embed(node);
-						//var app = Elm.Main.fullscreen();
+
+						var flags = {
+							email: "",
+							name: "",
+							learnings: [],
+							myEmail: ""
+						};
+
+						var data = localStorage.getItem("model");
+						if (data) {
+							try {
+								var model = JSON.parse(data);
+								flags.email = model.email;
+								flags.name = model.name;
+								flags.learnings = model.learnings;
+								flags.myEmail = model.myEmail;
+							} catch(e) {
+								console.error(e);
+							}
+						}
+
+						var app = Elm.Main.embed(node, flags);
+						
+						app.ports.storeModel.subscribe(function(model) {
+							localStorage.model = model;
+						});
+						
+						window.addEventListener("storage", function(event) {
+							if (event.storageArea === localStorage && event.key === "model") {
+								app.ports.onStorageChange.send(event.newValue);
+							}
+      }, false);
 					}, 100);
 		
 					setTimeout(function() {
@@ -40,6 +70,8 @@
 							RoadmapWidget.load({id: "57b8488bc7899e5cb4337f06"});
 						}
 					}, 1000);
+
+
 				</script>
     </body>
 </html>

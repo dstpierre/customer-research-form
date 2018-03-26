@@ -6,13 +6,23 @@ import Html.Events exposing (onInput, onClick)
 import Dom exposing (..)
 import Http
 import Json.Decode as Decode
+import Json.Decode.Pipeline as Pipe exposing (decode, required)
 import Json.Encode as Encode
 import Task
+import Ports
 
 
-main : Program Never Model Msg
+type alias Flags =
+    { email : String
+    , name : String
+    , learnings : List String
+    , myEmail : String
+    }
+
+
+main : Program Flags Model Msg
 main =
-    Html.program
+    Html.programWithFlags
         { init = init
         , view = view
         , update = update
@@ -73,10 +83,18 @@ update msg model =
             ( { model | learning = l }, Cmd.none )
 
         AddLearning ->
-            ( { model | learnings = model.learning :: model.learnings, learning = "" }, Task.attempt FocusResult (Dom.focus "learning") )
+            let
+                updatedModel =
+                    { model | learnings = model.learning :: model.learnings, learning = "" }
+            in
+                ( updatedModel, Cmd.batch [ setFocus, saveToStorage updatedModel ] )
 
         RemoveLearning l ->
-            ( { model | learnings = removeLearning l model.learnings }, Cmd.none )
+            let
+                updatedModel =
+                    { model | learnings = removeLearning l model.learnings }
+            in
+                ( updatedModel, saveToStorage updatedModel )
 
         SendTranscript ->
             ( { model | step = Send }, Cmd.none )
@@ -88,10 +106,20 @@ update msg model =
             ( { model | password = p }, Cmd.none )
 
         Submit ->
-            ( { model | submitted = True }, submit model )
+            ( { model | submitted = True }, Cmd.batch [ submit model, saveToStorage model ] )
 
         SubmitResult (Ok status) ->
-            ( { model | status = status, step = Confirm }, Cmd.none )
+            let
+                updatedModel =
+                    { model
+                        | status = status
+                        , step = Confirm
+                        , learnings = []
+                        , email = ""
+                        , name = ""
+                    }
+            in
+                ( updatedModel, saveToStorage updatedModel )
 
         SubmitResult (Err e) ->
             ( { model | error = toString e, step = WithError }, Cmd.none )
@@ -102,7 +130,7 @@ update msg model =
 
 view : Model -> Html Msg
 view model =
-    div [ class "container" ]
+    div [ class "container", style [ ( "padding-top", "95px" ) ] ]
         [ h1 [ class "title is-1" ] [ text "Customer research form" ]
         , case model.step of
             Capture ->
@@ -132,6 +160,10 @@ captureView : Model -> Html Msg
 captureView model =
     div []
         [ h3 [ class "subtitle is-3" ] [ text "Customer information" ]
+        , p [ class "subtitle is-5" ] [ text "You may use this tool to capture learnings from a customer research call or interview." ]
+        , p [ class "subtitle is-5" ]
+            [ text "At the end of you call you will receive the transcript by email, and optionally you can push the learnings as product feedback to a Roadmap account." ]
+        , p [ class "subtitle is-5" ] [ text "We will create an account automatically if you do not have one already." ]
         , div [ class "field" ]
             [ label [ class "label" ] [ text "Customer name" ]
             , div [ class "control" ] [ input [ class "input", onInput InputName, value model.name ] [] ]
@@ -197,6 +229,7 @@ sendView model =
             , div [ class "control" ] [ input [ class "input", onInput InputMyEmail, value model.myEmail ] [] ]
             ]
         , (roadmapView model)
+        , p [] []
         , p [] [ button [ class "button is-primary", onClick Submit ] [ text "Process the data" ] ]
         ]
 
@@ -209,7 +242,12 @@ roadmapView model =
         , p [] [ text "From there your team can prioritize feedback and promote them to product ideas where you may get insights from internal and external users. Here's an example of the feedback inbox." ]
         , p [] [ img [ src "https://roadmap.space/img/tour/feedback-inbox.png", alt "Roadmap feedback inbox" ] [] ]
         , p [ class "notification is-info" ] [ text "Enter a password if you would want us to add to your existing account or create a new account for you." ]
-        , div [ class "control" ] [ input [ class "input", type_ "password", onInput InputPassword, value model.password ] [] ]
+        , div [ class "field" ]
+            [ div [ class "control" ]
+                [ label [ class "label" ] [ text "Roadmap password" ]
+                , input [ class "input", type_ "password", onInput InputPassword, value model.password ] []
+                ]
+            ]
         ]
 
 
@@ -236,14 +274,14 @@ subscriptions model =
     Sub.none
 
 
-init : ( Model, Cmd Msg )
-init =
+init : Flags -> ( Model, Cmd Msg )
+init flags =
     ( { step = Capture
-      , name = ""
-      , email = ""
+      , name = flags.name
+      , email = flags.email
       , learning = ""
-      , learnings = []
-      , myEmail = ""
+      , learnings = flags.learnings
+      , myEmail = flags.myEmail
       , password = ""
       , submitted = False
       , status = False
@@ -297,3 +335,91 @@ encodeBody model =
         , ( "email", Encode.string model.myEmail )
         , ( "password", Encode.string model.password )
         ]
+
+
+modelStorageChange : Sub (Maybe Model)
+modelStorageChange =
+    Ports.onStorageChange (Decode.decodeValue modelDecoder >> Result.toMaybe)
+
+
+modelDecoder : Decode.Decoder Model
+modelDecoder =
+    decode Model
+        |> Pipe.required "step" stepDecoder
+        |> Pipe.required "name" Decode.string
+        |> Pipe.required "email" Decode.string
+        |> Pipe.required "learning" Decode.string
+        |> Pipe.required "learnings" (Decode.list Decode.string)
+        |> Pipe.required "myEmail" Decode.string
+        |> Pipe.required "password" Decode.string
+        |> Pipe.required "submitted" Decode.bool
+        |> Pipe.required "status" Decode.bool
+        |> Pipe.required "error" Decode.string
+
+
+stepDecoder : Decode.Decoder Steps
+stepDecoder =
+    Decode.string
+        |> Decode.andThen
+            (\str ->
+                case str of
+                    "Capture" ->
+                        Decode.succeed Capture
+
+                    "Write" ->
+                        Decode.succeed Write
+
+                    "Send" ->
+                        Decode.succeed Send
+
+                    x ->
+                        Decode.succeed Write
+            )
+
+
+modelEncoder : Model -> Encode.Value
+modelEncoder model =
+    Encode.object
+        [ ( "step", Encode.string (stepString model.step) )
+        , ( "name", Encode.string model.name )
+        , ( "email", Encode.string model.email )
+        , ( "learning", Encode.string model.learning )
+        , ( "learnings", Encode.list (List.map Encode.string model.learnings) )
+        , ( "myEmail", Encode.string model.myEmail )
+        , ( "password", Encode.string model.password )
+        , ( "submitted", Encode.bool model.submitted )
+        , ( "status", Encode.bool model.status )
+        , ( "error", Encode.string model.error )
+        ]
+
+
+stepString : Steps -> String
+stepString step =
+    case step of
+        Capture ->
+            "Capture"
+
+        Write ->
+            "Write"
+
+        Send ->
+            "Send"
+
+        Confirm ->
+            "Confirm"
+
+        WithError ->
+            "WithError"
+
+
+saveToStorage : Model -> Cmd Msg
+saveToStorage model =
+    modelEncoder model
+        |> Encode.encode 0
+        |> Just
+        |> Ports.storeModel
+
+
+setFocus : Cmd Msg
+setFocus =
+    Task.attempt FocusResult (Dom.focus "learning")
